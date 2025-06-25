@@ -1,0 +1,215 @@
+<script>
+  const log = document.getElementById("log");
+  const actions = document.getElementById("actions");
+  const anim = document.getElementById("animation");
+  const playerBar = document.getElementById("player-bar");
+  const enemyBar = document.getElementById("enemy-bar");
+
+  let player = {
+    name: "You",
+    hp: 100,
+    maxHp: 100,
+    level: 1,
+    exp: 0,
+    nextExp: 100,
+    persona: "Orpheus",
+  };
+
+  let enemy = {};
+  let difficulty = "normal";
+
+  const difficulties = {
+    easy: {
+      name: "Slime",
+      hp: 60,
+      attack: [5, 10],
+      critChance: 0.3,
+      missChance: 0.05,
+      enemyMissChance: 0.2
+    },
+    normal: {
+      name: "Shadow",
+      hp: 100,
+      attack: [10, 15],
+      critChance: 0.2,
+      missChance: 0.1,
+      enemyMissChance: 0.1
+    },
+    hard: {
+      name: "Death",
+      hp: 150,
+      attack: [20, 30],
+      critChance: 0.1,
+      missChance: 0.2,
+      enemyCritChance: 0.25,
+      healFactor: 0.5,
+      doubleAttackChance: 0.25,
+      enemyMissChance: 0
+    }
+  };
+
+  function updateBars() {
+    playerBar.style.width = (player.hp / player.maxHp) * 100 + "%";
+    enemyBar.style.width = (enemy.currentHp / enemy.hp) * 100 + "%";
+    playerBar.textContent = `HP: ${player.hp}/${player.maxHp}`;
+    enemyBar.textContent = `${enemy.name} HP: ${enemy.currentHp}/${enemy.hp}`;
+  }
+
+  function showFX(text, fxClass) {
+    anim.className = "";
+    anim.innerText = text;
+    anim.classList.add("animate", fxClass);
+  }
+
+  function startGame(diff = "normal") {
+    difficulty = diff;
+    player.hp = player.maxHp;
+    enemy = { ...difficulties[diff], currentHp: difficulties[diff].hp };
+    enemy.hp = enemy.currentHp;
+    log.innerText = `Enemy: ${enemy.name} (HP: ${enemy.currentHp})\nYour HP: ${player.hp} | Level: ${player.level} (EXP: ${player.exp}/${player.nextExp})\n\nChoose your action...`;
+    updateBars();
+    showActions();
+  }
+
+  function showActions() {
+    actions.innerHTML = `
+      <button onclick="attack()">Attack</button>
+      <button onclick="skill()">Skill</button>
+      <button onclick="defend()">Defend</button>
+      <button onclick="heal()">Heal</button>
+      <button onclick="save()">Save</button>`;
+  }
+
+  function attack() {
+    const settings = difficulties[difficulty];
+    showFX("⚔️ ATTACK!", "fx-attack");
+    const crit = Math.random() < settings.critChance;
+    const miss = Math.random() < settings.missChance;
+    let damage = Math.floor(Math.random() * 15) + 5;
+    if (miss) {
+      log.innerText += `\n> You missed!`;
+      enemyAttack();
+      return;
+    }
+    if (crit) {
+      damage *= 2;
+      log.innerText += `\n> Critical Hit! `;
+    }
+    enemy.currentHp -= damage;
+    log.innerText += `\n> You attack ${enemy.name} for ${damage} damage.`;
+    updateBars();
+    checkBattleState();
+  }
+
+  function skill() {
+    showFX("🔥 SKILL: AGI!", "fx-skill");
+    const skillDamage = Math.floor(Math.random() * 20) + 15;
+    enemy.currentHp -= skillDamage;
+    log.innerText += `\n> You cast Agi and deal ${skillDamage} damage.`;
+    updateBars();
+    checkBattleState();
+  }
+
+  function defend() {
+    showFX("🛡 DEFEND!", "fx-defend");
+    const reduced = Math.floor(Math.random() * 6) + 6;
+    log.innerText += `\n> You guard! Damage will be reduced by ${reduced}.`;
+    enemyAttack(reduced);
+  }
+
+  function heal() {
+    showFX("✨ HEAL!", "fx-heal");
+    const baseHeal = Math.floor(Math.random() * 20) + 15;
+    const healFactor = difficulties[difficulty].healFactor || 1;
+    const heal = Math.floor(baseHeal * healFactor);
+    player.hp = Math.min(player.maxHp, player.hp + heal);
+    log.innerText += `\n> You heal for ${heal} HP.`;
+    updateBars();
+    enemyAttack();
+  }
+
+  function enemyAttack(reduction = 0) {
+    if (enemy.currentHp <= 0) return;
+
+    const settings = difficulties[difficulty];
+    const missChance = settings.enemyMissChance || 0;
+    const critChance = settings.enemyCritChance || 0;
+    const isMiss = Math.random() < missChance;
+    const isCrit = Math.random() < critChance;
+
+    let damage = Math.floor(Math.random() * (enemy.attack[1] - enemy.attack[0] + 1)) + enemy.attack[0];
+    damage -= reduction;
+    damage = Math.max(0, damage);
+
+    if (isMiss) {
+      log.innerText += `\n> ${enemy.name} missed!`;
+    } else {
+      if (isCrit) {
+        damage *= 2;
+        log.innerText += `\n> ${enemy.name} lands a Critical Hit!`;
+      }
+      player.hp -= damage;
+      log.innerText += `\n> ${enemy.name} hits you for ${damage} damage.`;
+    }
+
+    // Hard mode: double attack chance
+    if (difficulty === "hard" && Math.random() < (settings.doubleAttackChance || 0)) {
+      log.innerText += `\n> ${enemy.name} attacks again!`;
+      enemyAttack();
+    }
+
+    updateBars();
+    checkBattleState();
+  }
+
+  function checkBattleState() {
+    if (enemy.currentHp <= 0) {
+      const expGain = Math.floor(Math.random() * 50) + 50;
+      player.exp += expGain;
+      log.innerText += `\n\n>> ${enemy.name} Defeated! Gained ${expGain} EXP.`;
+      checkLevelUp();
+      actions.innerHTML = `<button onclick="startGame('${difficulty}')">Next Battle</button>`;
+      save();
+      return;
+    }
+    if (player.hp <= 0) {
+      log.innerText += `\n\n>> SYSTEM FAILURE. YOU ARE DEAD.`;
+      actions.innerHTML = "";
+      return;
+    }
+    log.innerText += `\n\nEnemy HP: ${enemy.currentHp}\nYour HP: ${player.hp}`;
+  }
+
+  function checkLevelUp() {
+    while (player.exp >= player.nextExp) {
+      player.exp -= player.nextExp;
+      player.level++;
+      player.maxHp += 20;
+      player.hp = player.maxHp;
+      player.nextExp = Math.floor(player.nextExp * 1.3);
+      log.innerText += `\n>> LEVEL UP! Now Level ${player.level}, Max HP: ${player.maxHp}`;
+      updateBars();
+    }
+  }
+
+  function save() {
+    localStorage.setItem("terminalTurnSave", JSON.stringify(player));
+    log.innerText += `\n> Game Saved.`;
+  }
+
+  function load() {
+    const data = localStorage.getItem("terminalTurnSave");
+    if (data) {
+      player = JSON.parse(data);
+      log.innerText = `>> Save loaded. Welcome back.\nLevel: ${player.level} | HP: ${player.hp} | EXP: ${player.exp}/${player.nextExp}`;
+      updateBars();
+    }
+  }
+
+  actions.innerHTML = `
+    <button onclick="startGame('easy')">Easy</button>
+    <button onclick="startGame('normal')">Normal</button>
+    <button onclick="startGame('hard')">Hard</button>
+    <button onclick="load()">Load Save</button>`;
+  log.innerText = "Welcome to TERMINAL TURN.\nSelect difficulty or load save.";
+</script>
